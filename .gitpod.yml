@@ -1,0 +1,9 @@
+ports:
+  - name: webhook
+    description: bitbucket push event webhook handler
+    port: 8000
+    visibility: public
+
+tasks:
+  - name: Install Dependencies
+    init: poetry install
