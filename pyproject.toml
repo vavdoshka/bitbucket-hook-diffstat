@@ -1,8 +1,11 @@
 [tool.poetry]
 name = "bitbucket-hook-diffstat"
-version = "0.1.0"
+version = "0.1.2"
 description = ""
 authors = ["Vlad <vova.avdoshka@gmail.com>"]
+readme = "README.md"
+homepage = "https://github.com/vavdoshka/bitbucket-hook-diffstat"
+repository = "https://github.com/vavdoshka/bitbucket-hook-diffstat"
 
 [tool.poetry.dependencies]
 python = "^3.8"

@@ -123,7 +123,17 @@ def extract_from_to_commit_hashes(push_change_payload, session, repo_owner, repo
         )
 
 
-def process_branch_events(push_payload, session, repo_owner, repo_name):
+def process_branch_events(push_payload, repo_owner, repo_name, bitbucket_user, bitbucket_password):
+    retry_strategy = Retry(
+    total=3,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["HEAD", "GET", "OPTIONS"],
+)
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    session.auth = (bitbucket_user, bitbucket_password)
+
     errors = []
     change_sets_hashes = []
     changed_paths = set()
@@ -166,50 +176,37 @@ def process_branch_events(push_payload, session, repo_owner, repo_name):
             errors.append(error)
             continue
         changed_paths.update(changed_path_set)
+
     return changed_paths, errors
 
-
-from http.server import HTTPServer, BaseHTTPRequestHandler
-
-retry_strategy = Retry(
-    total=3,
-    status_forcelist=[429, 500, 502, 503, 504],
-    allowed_methods=["HEAD", "GET", "OPTIONS"],
-)
-adapter = HTTPAdapter(max_retries=retry_strategy)
-session = requests.Session()
-session.mount("https://", adapter)
-session.auth = (os.getenv("BITBUCKET_USER"), os.getenv("BITBUCKET_PASSWORD"))
-
-
-class Handler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        content_length = int(
-            self.headers["Content-Length"]
-        )  # <--- Gets the size of data
-        post_data = self.rfile.read(content_length)  # <--- Gets the data itself
-        push_payload = json.loads(post_data.decode("utf-8"))
-
-        print(
-            process_branch_events(
-                push_payload,
-                session,
-                os.getenv("BITBUCKET_PROJECT_SLUG"),
-                os.getenv("BITBUCKET_REPO_SLUG"),
-            )
-        )
-
-        self.send_response(200)
-        self.wfile.write("POST request for {}".format(self.path).encode("utf-8"))
-
-
-def run(server_class=HTTPServer, handler_class=Handler):
-    server_address = ("", 8000)
-    httpd = server_class(server_address, handler_class)
-    httpd.serve_forever()
-
-
 if __name__ == "__main__":
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            content_length = int(
+                self.headers["Content-Length"]
+            )  # <--- Gets the size of data
+            post_data = self.rfile.read(content_length)  # <--- Gets the data itself
+            push_payload = json.loads(post_data.decode("utf-8"))
+
+            print(
+                process_branch_events(
+                    push_payload,
+                    session,
+                    os.getenv("BITBUCKET_PROJECT_SLUG"),
+                    os.getenv("BITBUCKET_REPO_SLUG"),
+                )
+            )
+
+            self.send_response(200)
+            self.wfile.write("POST request for {}".format(self.path).encode("utf-8"))
+
+
+    def run(server_class=HTTPServer, handler_class=Handler):
+        server_address = ("", 8000)
+        httpd = server_class(server_address, handler_class)
+        httpd.serve_forever()
 
     print("starting http server")
     run()
