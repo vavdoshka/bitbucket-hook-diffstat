@@ -2,24 +2,31 @@
 
 ## Overview
 
-This is a simple webhook handler for Bitbucket repository push events.
+Bitbucket push webhook handler to generate a list of files changed on a push.
 
-It processes branch update and branch create events and extracts the file paths which were changed in that event.
-In case of branch update event get's the changset between current HEAD of the branch and the previous HEAD of that branch.
-In case if branch is created it get's the changset between current HEAD of the branch and HEAD of main branch of the repository.
+It processes branch updates, and the branch creates events and extracts the file paths of the files whose content was changed in that event, including the removal or creation of the file itself.
+In the case of a branch update event, it gets the changeset between the current HEAD of the branch and the previous HEAD of that branch.
+In case the branch is created, it gets the changeset between the current HEAD of the branch and the HEAD of the main branch of the repository.
+It uses Bitbucket `diffstat`,  `repositories`, and `branches` APIs. It handles some basic retries on unexpected HTTP response codes from BitBucket.
 
 ## Usage
-Set following environment variables:
+```python
+from bitbucket_hook_diffstat import process_branch_events
+
+result, errors = process_branch_events(
+    push_payload, repo_owner, repo_name, bitbucket_user, bitbucket_password
+)
+
+result # Is a list of zero or more distinct file pathnames
+errors # Is a list of text strings indicating the errors which occured during the process. This function does not raise any Exception.
+# - zero or more of 
+#   "Invalid push change payload"
+#   "Unexpected response HTTP status"
+#   "Can not process event because it's type is "unknown""
+#   "Unhandled error"
 ```
-BITBUCKET_PROJECT_SLUG
-BITBUCKET_REPO_SLUG
-BITBUCKET_USER
-BITBUCKET_PASSWORD
-```
-Where `BITBUCKET_PASSWORD` is an "app password" and `BITBUCKET_USER` is available as "Username" in Bitbucket profile settings.
+Where `bitbucket_password` is an "app password" and `bitbucket_user` is available as "Username" in Bitbucket profile settings. This user should be authorized to do Repositories Read.
 
-Replace or enhance `class Handler` with your custom logic to trigger some custom CI pipelines for example.
+`push_payload` is a repository push event - https://support.atlassian.com/bitbucket-cloud/docs/event-payloads/#Push
 
-Host it somewhere
-
-Create the PUSH webhook trigger in your Bitbucket repository.
+`repo_owner` and `repo_name` one can retrieve from the repository URL https://bitbucket.org/`repo_owner`/`repo_name` 

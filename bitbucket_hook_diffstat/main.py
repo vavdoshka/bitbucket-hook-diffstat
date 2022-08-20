@@ -17,7 +17,6 @@ def get_repo_main_branch(session, repo_owner, repo_name):
 
 def get_branch_from_to_commits(session, repo_owner, repo_name, branch_name):
 
-    commit_history = []
     main_branch = get_repo_main_branch(session, repo_owner, repo_name)
     from_commit = get_branch_head_commit(session, repo_owner, repo_name, main_branch)
     to_commit = get_branch_head_commit(session, repo_owner, repo_name, branch_name)
@@ -119,7 +118,7 @@ def extract_from_to_commit_hashes(push_change_payload, session, repo_owner, repo
     elif event_type == "unknown":
         return (
             (None, None),
-            f'can not process event because it\'s type is "unknown". Change payoload {push_change_payload}',
+            f'Can not process event because it\'s type is "unknown". Change payoload {push_change_payload}',
         )
 
 
@@ -138,46 +137,49 @@ def process_branch_events(push_payload, repo_owner, repo_name, bitbucket_user, b
     change_sets_hashes = []
     changed_paths = set()
     push_changes = push_payload["push"]["changes"]
-    for push_change_payload in push_changes:
-        # since payload can contain multiple events
-        # we try to be soft on errors and get processed what we can
-        # the errors will be raised at the end of process
-        if "new" not in push_change_payload or "old" not in push_change_payload:
-            errors.append(f"invalid push change payload: {push_change_payload}")
+    try:
+        for push_change_payload in push_changes:
+            # since payload can contain multiple events
+            # we try to be soft on errors and get processed what we can
+            # the errors will be raised at the end of process
+            if "new" not in push_change_payload or "old" not in push_change_payload:
+                errors.append(f"Invalid push change payload: {push_change_payload}")
 
-        if (
-            push_change_payload["new"] is not None
-            and push_change_payload["new"]["type"] != "branch"
-        ) or (
-            push_change_payload["old"] is not None
-            and push_change_payload["old"]["type"] != "branch"
-        ):
-            continue
+            if (
+                push_change_payload["new"] is not None
+                and push_change_payload["new"]["type"] != "branch"
+            ) or (
+                push_change_payload["old"] is not None
+                and push_change_payload["old"]["type"] != "branch"
+            ):
+                continue
 
-        (from_hash, to_hash), error = extract_from_to_commit_hashes(
-            push_change_payload, session, repo_owner, repo_name
-        )
-        if error is not None:
-            errors.append(error)
-            continue
+            (from_hash, to_hash), error = extract_from_to_commit_hashes(
+                push_change_payload, session, repo_owner, repo_name
+            )
+            if error is not None:
+                errors.append(error)
+                continue
 
-        if from_hash is not None and to_hash is not None:
-            change_sets_hashes.append((from_hash, to_hash))
+            if from_hash is not None and to_hash is not None:
+                change_sets_hashes.append((from_hash, to_hash))
 
-    for change_set_hash_pair in change_sets_hashes:
-        changed_path_set, error = get_changed_paths(
-            session,
-            repo_owner,
-            repo_name,
-            change_set_hash_pair[0],
-            change_set_hash_pair[1],
-        )
-        if error is not None:
-            errors.append(error)
-            continue
-        changed_paths.update(changed_path_set)
+        for change_set_hash_pair in change_sets_hashes:
+            changed_path_set, error = get_changed_paths(
+                session,
+                repo_owner,
+                repo_name,
+                change_set_hash_pair[0],
+                change_set_hash_pair[1],
+            )
+            if error is not None:
+                errors.append(error)
+                continue
+            changed_paths.update(changed_path_set)
+    except Exception as e:
+        errors.append(f"Unhandled error {e} while processing push change payload: {push_change_payload}")
 
-    return changed_paths, errors
+    return list(changed_paths), errors
 
 if __name__ == "__main__":
     from http.server import HTTPServer, BaseHTTPRequestHandler
