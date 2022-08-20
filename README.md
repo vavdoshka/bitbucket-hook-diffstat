@@ -17,7 +17,7 @@ result, errors = process_bitbucket_push_events(
     push_payload, repo_owner, repo_name, bitbucket_user, bitbucket_password
 )
 
-result # Is a list of zero or more distinct file pathnames
+result # Is a dict of zero or more branches to the list of one to many distinct file pathnames, for example '{"master": [".gitignore"]}'
 errors # Is a list of text strings indicating the errors which occured during the process. This function does not raise any Exception.
 # - zero or more of 
 #   "Invalid push change payload"
@@ -27,6 +27,6 @@ errors # Is a list of text strings indicating the errors which occured during th
 ```
 Where `bitbucket_password` is an "app password" and `bitbucket_user` is available as "Username" in Bitbucket profile settings. This user should be authorized to do Repositories Read.
 
-`push_payload` is a repository push event - https://support.atlassian.com/bitbucket-cloud/docs/event-payloads/#Push
+`push_payload` is a Bitbucket repository [push event](https://support.atlassian.com/bitbucket-cloud/docs/event-payloads/#Push)
 
-`repo_owner` and `repo_name` one can retrieve from the repository URL https://bitbucket.org/`repo_owner`/`repo_name` 
+`repo_owner` and `repo_name` one can retrieve from the repository URL `https://bitbucket.org/repo_owner/repo_name` 

@@ -10,9 +10,9 @@ from requests.packages.urllib3.util.retry import Retry
 
 
 class ChangeSetHash:
-    def __init__(self, from_commit, to_commit, branch_name):
-        self.from_commit = from_commit
-        self.to_commit = to_commit
+    def __init__(self, from_hash, to_hash, branch_name):
+        self.from_hash = from_hash
+        self.to_hash = to_hash
         self.branch_name = branch_name
 
 
@@ -169,7 +169,7 @@ def get_change_set_hashes(push_changes, session, repo_owner, repo_name):
             change_sets_hashes.append(ChangeSetHash(from_hash, to_hash, branch_name))
     return change_sets_hashes, errors
 
-def get_changed_paths(change_sets_hashes, session, repo_owner, repo_name):
+def get_changed_paths_per_event(change_sets_hashes, session, repo_owner, repo_name):
     changed_paths = defaultdict(list)
     errors = []
     for change_set_hash in change_sets_hashes:
@@ -199,6 +199,7 @@ def process_bitbucket_push_events(push_payload, repo_owner, repo_name, bitbucket
     session.auth = (bitbucket_user, bitbucket_password)
 
     allerrors = []
+    changed_paths = {}
     push_changes = push_payload["push"]["changes"]
 
     try:
@@ -206,7 +207,7 @@ def process_bitbucket_push_events(push_payload, repo_owner, repo_name, bitbucket
         if errors:
             allerrors.extend(errors)
 
-        changed_paths, errors = get_changed_paths(change_sets_hashes, session, repo_owner, repo_name)
+        changed_paths, errors = get_changed_paths_per_event(change_sets_hashes, session, repo_owner, repo_name)
         if errors:
             allerrors.extend(errors)
 
@@ -220,6 +221,10 @@ if __name__ == "__main__":
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
+            # don't want to retry
+            self.send_response(200)
+            self.wfile.write("POST request for {}".format(self.path).encode("utf-8"))
+
             content_length = int(
                 self.headers["Content-Length"]
             )  # <--- Gets the size of data
@@ -229,15 +234,12 @@ if __name__ == "__main__":
             print(
                 process_bitbucket_push_events(
                     push_payload,
-                    session,
-                    os.getenv("BITBUCKET_PROJECT_SLUG"),
-                    os.getenv("BITBUCKET_REPO_SLUG"),
+                    os.getenv("BITBUCKET_REPO_OWNER"),
+                    os.getenv("BITBUCKET_REPO_NAME"),
+                    os.getenv("BITBUCKET_USER"),
+                    os.getenv("BITBUCKET_PASSWORD"),
                 )
             )
-
-            self.send_response(200)
-            self.wfile.write("POST request for {}".format(self.path).encode("utf-8"))
-
 
     def run(server_class=HTTPServer, handler_class=Handler):
         server_address = ("", 8000)
