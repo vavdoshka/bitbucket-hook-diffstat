@@ -13,22 +13,16 @@ It uses Bitbucket `diffstat`,  `repositories`, and `branches` APIs. It handles s
 ```python
 from bitbucket_hook_diffstat import process_bitbucket_push_events
 
-result, errors = process_bitbucket_push_events(
+result = process_bitbucket_push_events(
     push_payload, repo_owner, repo_name, bitbucket_user, bitbucket_password
-) # This function does not raise any Exception but rather tries to return at least something usefull. One can return non 200 response to Bitbucket to retry request.
+) # it might raise an Exception, please check `bitbucket_hook_diffstat/exceptions.py`
 
-result # Is a dict of zero or more branches to the set of one or many file pathnames
+result # Is a dict of a zero or more branch names - strings to the set of one or many file pathnames - strings.
 {'master': {'.gitignore'}}
-errors # Is a list of text strings indicating the errors which occured during the process. 
-[]
-# - could be one or more of (with exception message)
-#   "Invalid push change payload"
-#   "Unexpected response HTTP status"
-#   "Can not process event because it's type is "unknown""
-#   "Unhandled error"
 ```
-Where `bitbucket_password` is an "app password" and `bitbucket_user` is available as "Username" in Bitbucket profile settings. This user should be authorized to do Repositories Read.
 
 `push_payload` is a Bitbucket repository [push event](https://support.atlassian.com/bitbucket-cloud/docs/event-payloads/#Push)
 
 `repo_owner` and `repo_name` one can retrieve from the repository URL `https://bitbucket.org/repo_owner/repo_name` 
+
+`bitbucket_password` is an "app password" and `bitbucket_user` is available as "Username" in Bitbucket profile settings. This user should be authorized to do Repositories Read.

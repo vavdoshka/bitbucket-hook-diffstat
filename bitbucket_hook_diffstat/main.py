@@ -7,6 +7,13 @@ from collections import defaultdict
 import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
+from requests.exceptions import RetryError
+from exceptions import (
+    BitbucketHookDiffstatError,
+    BitbucketMaxRetryError,
+    BitbucketPayloadBadFormatError,
+    BitbucketGenericError,
+)
 
 
 class ChangeSetHash:
@@ -16,11 +23,20 @@ class ChangeSetHash:
         self.branch_name = branch_name
 
 
+def request_get(session, url):
+    try:
+        response = session.get(url)
+        response.raise_for_status()
+    except RetryError as e:
+        raise BitbucketMaxRetryError(e)
+    except HTTPError as e:
+        raise BitbucketGenericError(e)
+    return response.json()
+
+
 def get_repo_main_branch(session, repo_owner, repo_name):
     url = f"https://api.bitbucket.org/2.0/repositories/{repo_owner}/{repo_name}"
-    response = session.get(url)
-    response.raise_for_status()
-    return response.json()["mainbranch"]["name"]
+    return request_get(session, url)["mainbranch"]["name"]
 
 
 def get_branch_from_to_commits(session, repo_owner, repo_name, branch_name):
@@ -34,37 +50,21 @@ def get_branch_from_to_commits(session, repo_owner, repo_name, branch_name):
 
 def get_branch_head_commit(session, repo_owner, repo_name, branch_name):
     url = f"https://api.bitbucket.org/2.0/repositories/{repo_owner}/{repo_name}/refs/branches/{branch_name}"
-    response = session.get(url)
-    response.raise_for_status()
-    return response.json()["target"]["hash"]
+    return request_get(session, url)["target"]["hash"]
 
 
 def get_changed_paths(session, repo_owner, repo_name, from_commit, to_commit):
 
-    error = None
     changed_paths = set()
     url = f"https://api.bitbucket.org/2.0/repositories/{repo_owner}/{repo_name}/diffstat/{to_commit}..{from_commit}"
     while True:
-        response = session.get(url)
-        if response.status_code != 200:
-            # since there might be some pagination
-            # and an error can happen after we already processed some data (after 1st page basically)
-            # we won't fail here and just provide back what was processed so far
-            error = (
-                "Unexpected response HTTP status"
-                f' {response.status_code} with reason "{response.reason}"'
-                f' - a response on a GET request "{session.base_url}{url}"'
-            )
-            return changed_paths, error
-
-        json_data = response.json()
-
+        json_data = request_get(session, url)
         changed_paths.update(extract_changed_paths(json_data))
         if "next" not in json_data:
             break
         url = json_data["next"]
 
-    return changed_paths, error
+    return changed_paths
 
 
 def extract_changed_paths(json_data):
@@ -87,13 +87,6 @@ def extract_changed_paths(json_data):
 
 
 def detect_branch_change_event_type(push_change_payload):
-    if (
-        "new" not in push_change_payload
-        or "old" not in push_change_payload
-        or (push_change_payload["new"] is None and push_change_payload["old"] is None)
-    ):
-        return "unknown"
-
     if push_change_payload["new"] is not None and push_change_payload["old"] is None:
         return "branch_created"
     elif push_change_payload["new"] is None and push_change_payload["old"] is not None:
@@ -116,39 +109,39 @@ def extract_branch_name(push_change_payload):
 
 
 def extract_from_to_commit_hashes(push_change_payload, session, repo_owner, repo_name):
-    error = None
     event_type = detect_branch_change_event_type(push_change_payload)
     if event_type == "branch_updated":
         return (
-            (
-                push_change_payload["old"]["target"]["hash"],
-                push_change_payload["new"]["target"]["hash"],
-            ),
-            error,
+            push_change_payload["old"]["target"]["hash"],
+            push_change_payload["new"]["target"]["hash"],
         )
+
     elif event_type == "branch_created":
         from_commit, to_commit = get_branch_from_to_commits(
             session, repo_owner, repo_name, push_change_payload["new"]["name"]
         )
-        return ((from_commit, to_commit), None)
+        return from_commit, to_commit
     elif event_type == "branch_removed":
-        return ((None, None), error)
-    elif event_type == "unknown":
-        return (
-            (None, None),
-            f'Can not process event because it\'s type is "unknown". Change payoload {push_change_payload}',
-        )
+        # ignore branch remove events
+        return None, None
 
 
 def get_change_set_hashes(push_changes, session, repo_owner, repo_name):
     change_sets_hashes = []
-    errors = []
+
     for push_change_payload in push_changes:
-        # since payload can contain multiple events
-        # we try to be soft on errors and get processed what we can
-        # the errors will be raised at the end of process
-        if "new" not in push_change_payload or "old" not in push_change_payload:
-            errors.append(f"Invalid push change payload: {push_change_payload}")
+
+        if (
+            "new" not in push_change_payload
+            or "old" not in push_change_payload
+            or (
+                push_change_payload["new"] is None
+                and push_change_payload["old"] is None
+            )
+        ):
+            raise BitbucketPayloadBadFormatError(
+                "Bitbucket provided unexpected webhook payload format"
+            )
 
         if (
             push_change_payload["new"] is not None
@@ -157,43 +150,66 @@ def get_change_set_hashes(push_changes, session, repo_owner, repo_name):
             push_change_payload["old"] is not None
             and push_change_payload["old"]["type"] != "branch"
         ):
+            # tag creation or some other non branch change related event
             continue
 
-        (from_hash, to_hash), error = extract_from_to_commit_hashes(
+        from_hash, to_hash = extract_from_to_commit_hashes(
             push_change_payload, session, repo_owner, repo_name
         )
-        if error is not None:
-            errors.append(error)
-            continue
 
         branch_name = extract_branch_name(push_change_payload)
         if from_hash is not None and to_hash is not None:
             change_sets_hashes.append(ChangeSetHash(from_hash, to_hash, branch_name))
-    return change_sets_hashes, errors
+    return change_sets_hashes
 
 
 def get_changed_paths_per_event(change_sets_hashes, session, repo_owner, repo_name):
     changed_paths = defaultdict(set)
-    errors = []
     for change_set_hash in change_sets_hashes:
-        changed_path_set, error = get_changed_paths(
+        changed_path_set = get_changed_paths(
             session,
             repo_owner,
             repo_name,
             change_set_hash.from_hash,
             change_set_hash.to_hash,
         )
-        if error is not None:
-            errors.append(error)
-            continue
         if changed_path_set not in changed_paths[change_set_hash.branch_name]:
             changed_paths[change_set_hash.branch_name].update(changed_path_set)
-    return changed_paths, errors
+    return changed_paths
 
 
 def process_bitbucket_push_events(
     push_payload, repo_owner, repo_name, bitbucket_user, bitbucket_password
 ):
+    retry_strategy = Retry(
+        total=3,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"],
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    session.auth = (bitbucket_user, bitbucket_password)
+
+    changed_paths = defaultdict(set)
+    push_changes = push_payload["push"]["changes"]
+
+    try:
+        change_sets_hashes = get_change_set_hashes(
+            push_changes, session, repo_owner, repo_name
+        )
+
+        changed_paths = get_changed_paths_per_event(
+            change_sets_hashes, session, repo_owner, repo_name
+        )
+
+    except Exception as e:
+        raise BitbucketGenericError(e)
+
+    return dict(changed_paths)
+
+
+def test(repo_owner, repo_name, bitbucket_user, bitbucket_password):
     retry_strategy = Retry(
         total=3,
         status_forcelist=[429, 500, 502, 503, 504],
@@ -204,32 +220,24 @@ def process_bitbucket_push_events(
     session.mount("https://", adapter)
     session.auth = (bitbucket_user, bitbucket_password)
 
-    allerrors = []
-    changed_paths = {}
-    push_changes = push_payload["push"]["changes"]
-
+    url = f"https://api.bitbucket.org/2.0/repositories/{repo_owner}/{repo_name}/refs/branches/dsf"
     try:
-        change_sets_hashes, errors = get_change_set_hashes(
-            push_changes, session, repo_owner, repo_name
-        )
-        if errors:
-            allerrors.extend(errors)
-
-        changed_paths, errors = get_changed_paths_per_event(
-            change_sets_hashes, session, repo_owner, repo_name
-        )
-        if errors:
-            allerrors.extend(errors)
-
-    except Exception as e:
-        errors.append(
-            f"Unhandled error {e} while processing push changes payload: {push_changes}"
-        )
-
-    return dict(changed_paths), errors
+        response = session.get(url)
+        response.raise_for_status()
+    except RetryError as e:
+        raise BitbucketMaxRetryError(e)
+    except HTTPError as e:
+        raise BitbucketGenericError(e)
 
 
 if __name__ == "__main__":
+    # test(
+    #              os.getenv("BITBUCKET_REPO_OWNER"),
+    #              os.getenv("BITBUCKET_REPO_NAME"),
+    #              os.getenv("BITBUCKET_USER"),
+    #              os.getenv("BITBUCKET_PASSWORD"),
+    # )
+
     from http.server import HTTPServer, BaseHTTPRequestHandler
 
     class Handler(BaseHTTPRequestHandler):
