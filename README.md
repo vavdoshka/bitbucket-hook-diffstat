@@ -15,7 +15,7 @@ from bitbucket_hook_diffstat import process_bitbucket_push_events
 
 result, errors = process_bitbucket_push_events(
     push_payload, repo_owner, repo_name, bitbucket_user, bitbucket_password
-) # This function does not raise any Exception but rather tries to return at least something usefull. Bitbucket will retry up to 2 times more if gets non 200 response.
+) # This function does not raise any Exception but rather tries to return at least something usefull. One can return non 200 response to Bitbucket to retry request.
 
 result # Is a dict of zero or more branches to the set of one or many file pathnames
 {'master': {'.gitignore'}}
