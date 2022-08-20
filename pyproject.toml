@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bitbucket-hook-diffstat"
-version = "0.4.0"
+version = "0.4.1"
 description = "Bitbucket push webhook handler to generate a list of files changed on a push"
 authors = ["Vlad <vova.avdoshka@gmail.com>"]
 readme = "README.md"
