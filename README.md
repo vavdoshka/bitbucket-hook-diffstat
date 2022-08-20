@@ -11,9 +11,9 @@ It uses Bitbucket `diffstat`,  `repositories`, and `branches` APIs. It handles s
 
 ## Usage
 ```python
-from bitbucket_hook_diffstat import process_branch_events
+from bitbucket_hook_diffstat import process_bitbucket_push_events
 
-result, errors = process_branch_events(
+result, errors = process_bitbucket_push_events(
     push_payload, repo_owner, repo_name, bitbucket_user, bitbucket_password
 )
 

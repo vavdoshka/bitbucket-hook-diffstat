@@ -1,2 +1,2 @@
-from .main import process_branch_events
-__all__ = [process_branch_events]
+from .main import process_bitbucket_push_events
+__all__ = [process_bitbucket_push_events]

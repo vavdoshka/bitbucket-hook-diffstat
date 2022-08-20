@@ -122,7 +122,7 @@ def extract_from_to_commit_hashes(push_change_payload, session, repo_owner, repo
         )
 
 
-def process_branch_events(push_payload, repo_owner, repo_name, bitbucket_user, bitbucket_password):
+def process_bitbucket_push_events(push_payload, repo_owner, repo_name, bitbucket_user, bitbucket_password):
     retry_strategy = Retry(
     total=3,
     status_forcelist=[429, 500, 502, 503, 504],
@@ -193,7 +193,7 @@ if __name__ == "__main__":
             push_payload = json.loads(post_data.decode("utf-8"))
 
             print(
-                process_branch_events(
+                process_bitbucket_push_events(
                     push_payload,
                     session,
                     os.getenv("BITBUCKET_PROJECT_SLUG"),
