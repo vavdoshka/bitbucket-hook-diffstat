@@ -15,11 +15,13 @@ from bitbucket_hook_diffstat import process_bitbucket_push_events
 
 result, errors = process_bitbucket_push_events(
     push_payload, repo_owner, repo_name, bitbucket_user, bitbucket_password
-)
+) # This function does not raise any Exception but rather tries to return at least something usefull. Bitbucket will retry up to 2 times more if gets non 200 response.
 
-result # Is a dict of zero or more branches to the list of one to many distinct file pathnames, for example '{"master": [".gitignore"]}'
-errors # Is a list of text strings indicating the errors which occured during the process. This function does not raise any Exception.
-# - zero or more of 
+result # Is a dict of zero or more branches to the set of one or many file pathnames
+{'master': {'.gitignore'}}
+errors # Is a list of text strings indicating the errors which occured during the process. 
+[]
+# - could be one or more of (with exception message)
 #   "Invalid push change payload"
 #   "Unexpected response HTTP status"
 #   "Can not process event because it's type is "unknown""

@@ -173,7 +173,7 @@ def get_change_set_hashes(push_changes, session, repo_owner, repo_name):
 
 
 def get_changed_paths_per_event(change_sets_hashes, session, repo_owner, repo_name):
-    changed_paths = defaultdict(list)
+    changed_paths = defaultdict(set)
     errors = []
     for change_set_hash in change_sets_hashes:
         changed_path_set, error = get_changed_paths(
@@ -187,7 +187,7 @@ def get_changed_paths_per_event(change_sets_hashes, session, repo_owner, repo_na
             errors.append(error)
             continue
         if changed_path_set not in changed_paths[change_set_hash.branch_name]:
-            changed_paths[change_set_hash.branch_name].append(changed_path_set)
+            changed_paths[change_set_hash.branch_name].update(changed_path_set)
     return changed_paths, errors
 
 
