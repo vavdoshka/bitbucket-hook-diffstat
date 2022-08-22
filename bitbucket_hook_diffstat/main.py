@@ -7,12 +7,12 @@ from collections import defaultdict
 import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-from requests.exceptions import RetryError
+from requests.exceptions import RetryError, HTTPError
 from bitbucket_hook_diffstat.exceptions import (
-    BitbucketHookDiffstatError,
     BitbucketMaxRetryError,
-    BitbucketPayloadBadFormatError,
-    BitbucketGenericError,
+    PayloadBadFormatError,
+    BitbucketHTTPError,
+    GenericError,
 )
 
 
@@ -30,7 +30,7 @@ def request_get(session, url):
     except RetryError as e:
         raise BitbucketMaxRetryError(e)
     except HTTPError as e:
-        raise BitbucketGenericError(e)
+        raise BitbucketHTTPError(e)
     return response.json()
 
 
@@ -139,8 +139,8 @@ def get_change_set_hashes(push_changes, session, repo_owner, repo_name):
                 and push_change_payload["old"] is None
             )
         ):
-            raise BitbucketPayloadBadFormatError(
-                "Bitbucket provided unexpected webhook payload format"
+            raise PayloadBadFormatError(
+                "Push payload formated wrong. It should contain at least one of \"new\" and \"old\" change details."
             )
 
         if (
@@ -204,39 +204,12 @@ def process_bitbucket_push_events(
         )
 
     except Exception as e:
-        raise BitbucketGenericError(e)
+        raise GenericError(e)
 
     return dict(changed_paths)
 
 
-def test(repo_owner, repo_name, bitbucket_user, bitbucket_password):
-    retry_strategy = Retry(
-        total=3,
-        status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["HEAD", "GET", "OPTIONS"],
-    )
-    adapter = HTTPAdapter(max_retries=retry_strategy)
-    session = requests.Session()
-    session.mount("https://", adapter)
-    session.auth = (bitbucket_user, bitbucket_password)
-
-    url = f"https://api.bitbucket.org/2.0/repositories/{repo_owner}/{repo_name}/refs/branches/dsf"
-    try:
-        response = session.get(url)
-        response.raise_for_status()
-    except RetryError as e:
-        raise BitbucketMaxRetryError(e)
-    except HTTPError as e:
-        raise BitbucketGenericError(e)
-
-
 if __name__ == "__main__":
-    # test(
-    #              os.getenv("BITBUCKET_REPO_OWNER"),
-    #              os.getenv("BITBUCKET_REPO_NAME"),
-    #              os.getenv("BITBUCKET_USER"),
-    #              os.getenv("BITBUCKET_PASSWORD"),
-    # )
 
     from http.server import HTTPServer, BaseHTTPRequestHandler
 

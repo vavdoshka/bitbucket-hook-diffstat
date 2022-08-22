@@ -5,10 +5,12 @@ class BitbucketHookDiffstatError(Exception):
 class BitbucketMaxRetryError(BitbucketHookDiffstatError):
     """A request to Bitbucket was not able to succeed after several retries"""
 
+class BitbucketHTTPError(BitbucketHookDiffstatError):
+    """A request to Bitbucket was not authorized or some other non-retryable error"""
 
-class BitbucketPayloadBadFormatError(BitbucketHookDiffstatError):
+class PayloadBadFormatError(BitbucketHookDiffstatError):
     """A webhook payload provided does satisfy expected format"""
 
 
-class BitbucketGenericError(BitbucketHookDiffstatError):
+class GenericError(BitbucketHookDiffstatError):
     """Unhandeled errors"""
