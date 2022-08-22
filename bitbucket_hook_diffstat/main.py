@@ -13,6 +13,7 @@ from bitbucket_hook_diffstat.exceptions import (
     PayloadBadFormatError,
     BitbucketHTTPError,
     GenericError,
+    BitbucketHookDiffstatError,
 )
 
 
@@ -140,7 +141,7 @@ def get_change_set_hashes(push_changes, session, repo_owner, repo_name):
             )
         ):
             raise PayloadBadFormatError(
-                "Push payload formated wrong. It should contain at least one of \"new\" and \"old\" change details."
+                'Push payload formated wrong. \'push/changes\' item should contain at least one of "new" and "old" change details.'
             )
 
         if (
@@ -178,9 +179,26 @@ def get_changed_paths_per_event(change_sets_hashes, session, repo_owner, repo_na
     return changed_paths
 
 
+def validate_webhook_origin(push_payload, repo_owner, repo_name):
+    try:
+        origin_repo = push_payload["push"]["repository"]["full_name"]
+    except KeyError:
+        raise PayloadBadFormatError(
+            f"Could not validate payload origin, 'push/repository/full_name' is missing."
+        )
+    expected_repo = f"{repo_owner}/{repo_name}"
+    if origin_repo != expected_repo:
+        raise PayloadBadFormatError(
+            f"Push payload origin repo is '{origin_repo}' while expected is {expected_repo}."
+        )
+
+
 def process_bitbucket_push_events(
     push_payload, repo_owner, repo_name, bitbucket_user, bitbucket_password
 ):
+
+    validate_webhook_origin(push_payload, repo_owner, repo_name)
+
     retry_strategy = Retry(
         total=3,
         status_forcelist=[429, 500, 502, 503, 504],
@@ -202,7 +220,8 @@ def process_bitbucket_push_events(
         changed_paths = get_changed_paths_per_event(
             change_sets_hashes, session, repo_owner, repo_name
         )
-
+    except BitbucketHookDiffstatError as e:
+        raise e
     except Exception as e:
         raise GenericError(e)
 
