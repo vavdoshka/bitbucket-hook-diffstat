@@ -181,10 +181,10 @@ def get_changed_paths_per_event(change_sets_hashes, session, repo_owner, repo_na
 
 def validate_webhook_origin(push_payload, repo_owner, repo_name):
     try:
-        origin_repo = push_payload["push"]["repository"]["full_name"]
+        origin_repo = push_payload["repository"]["full_name"]
     except KeyError:
         raise PayloadBadFormatError(
-            f"Could not validate payload origin, 'push/repository/full_name' is missing."
+            f"Could not validate payload origin, 'repository/full_name' is missing."
         )
     expected_repo = f"{repo_owner}/{repo_name}"
     if origin_repo != expected_repo:
