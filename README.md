@@ -9,7 +9,7 @@ In the case of a branch update event, it gets the changeset between the current 
 In case the branch is created, it gets the changeset between the current HEAD of the branch and the HEAD of the main branch of the repository.
 
 It uses Bitbucket `diffstat`,  `repositories`, and `branches` APIs. It handles some basic retries on retyable HTTP response codes from BitBucket.
-It aslo perform a basic validation of origin of webhook payload by comparing the expected owner and repo details with the details recieved in the push event, but in addition one should take care of whitelisting Bitbucket public IPs on the server side to make that check efficient.
+It aslo perform a basic validation of origin of webhook payload by comparing the expected owner and repo details with the details recieved in the push event, but in addition one should take care of whitelisting Bitbucket public IPs only on the server side to make that check efficient.
 ## Usage
 ```python
 from bitbucket_hook_diffstat import process_bitbucket_push_events
